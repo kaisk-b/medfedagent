@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Clinical Summary | MedFedAgent{% endblock %}
+
+{% block content %}
+<div class="dashboard-container clinical-view">
+    <!-- Hero Section -->
+    <section class="clinical-hero">
+        <div class="hero-content">
+            <div class="hero-icon">
+                <i class="fas fa-heartbeat"></i>
+            </div>
+            <div class="hero-text">
+                <h1>Hospital Leadership Dashboard</h1>
+                <p>A simplified view of your AI-powered diagnostic system status</p>
+            </div>
+        </div>
+        <div class="hero-status">
+            {% set privacy_pct = summary.privacy_percentage or 100 %}
+            {% set is_healthy = privacy_pct > 50 and (summary.best_auc or 0) > 0.7 %}
+            <div class="status-ring {% if is_healthy %}healthy{% else %}attention{% endif %}">
+                <div class="ring-inner">
+                    <span class="status-icon">
+                        {% if is_healthy %}
+                        <i class="fas fa-check-circle"></i>
+                        {% else %}
+                        <i class="fas fa-exclamation-circle"></i>
+                        {% endif %}
+                    </span>
+                    <span class="status-label">{% if is_healthy %}System Healthy{% else %}Needs Attention{% endif %}</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Executive Summary Cards -->
+    <section class="executive-cards">
+        <div class="exec-card privacy-card">
+            <div class="exec-card-header">
+                <div class="exec-icon">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <h3>Patient Privacy Protection</h3>
+            </div>
+            <div class="exec-card-body">
+                <div class="exec-metric">
+                    <span class="metric-value large">{{ format_percentage(summary.privacy_percentage) }}</span>
+                    <span class="metric-desc">Privacy Budget Remaining</span>
+                </div>
+                <div class="exec-explanation">
+                    <p><i class="fas fa-info-circle"></i> Patient data has <strong>never left</strong> your hospital's servers. Only encrypted, anonymized model updates are shared between hospitals.</p>
+                </div>
+                <div class="privacy-bar">
+                    <div class="bar-fill" style="width: {{ summary.privacy_percentage or 100 }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="exec-card performance-card">
+            <div class="exec-card-header">
+                <div class="exec-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <h3>Model Performance</h3>
+            </div>
+            <div class="exec-card-body">
+                {% set auc = summary.best_auc or 0 %}
+                {% set auc_interpretation = "Excellent" if auc > 0.85 else "Good" if auc > 0.75 else "Developing" %}
+                <div class="exec-metric">
+                    <span class="metric-value large">{{ format_percentage(auc * 100) }}</span>
+                    <span class="metric-desc">Diagnostic Accuracy (AUC)</span>
+                </div>
+                <div class="performance-grade {{ auc_interpretation|lower }}">
+                    <span class="grade-badge">{{ auc_interpretation }}</span>
+                </div>
+                <div class="exec-explanation">
+                    <p><i class="fas fa-stethoscope"></i> The AI can correctly distinguish abnormal from normal cases with {{ auc_interpretation|lower }} reliability.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="exec-card collaboration-card">
+            <div class="exec-card-header">
+                <div class="exec-icon">
+                    <i class="fas fa-hospital"></i>
+                </div>
+                <h3>Multi-Hospital Collaboration</h3>
+            </div>
+            <div class="exec-card-body">
+                <div class="exec-metric">
+                    <span class="metric-value large">{{ summary.total_rounds or 0 }}</span>
+                    <span class="metric-desc">Training Rounds Completed</span>
+                </div>
+                <div class="hospital-icons">
+                    <div class="hospital-icon active"><i class="fas fa-hospital-alt"></i></div>
+                    <div class="hospital-icon active"><i class="fas fa-hospital-alt"></i></div>
+                    <div class="hospital-icon active"><i class="fas fa-hospital-alt"></i></div>
+                </div>
+                <div class="exec-explanation">
+                    <p><i class="fas fa-network-wired"></i> Collaborating with partner hospitals without sharing raw patient data.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Section -->
+    <section class="benefits-section">
+        <h2 class="section-title">
+            <i class="fas fa-star"></i>
+            Key Benefits for Your Hospital
+        </h2>
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h4>HIPAA Compliant</h4>
+                <p>Differential privacy mathematically guarantees patient anonymity</p>
+                <span class="benefit-status active">
+                    <i class="fas fa-check"></i> Active
+                </span>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <h4>Fair AI</h4>
+                <p>Model performs equitably across different patient populations</p>
+                <span class="benefit-status {% if fairness.is_fair %}active{% else %}warning{% endif %}">
+                    {% if fairness.is_fair %}
+                    <i class="fas fa-check"></i> Verified
+                    {% else %}
+                    <i class="fas fa-exclamation"></i> Monitoring
+                    {% endif %}
+                </span>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i class="fas fa-shield-virus"></i>
+                </div>
+                <h4>Byzantine Resilient</h4>
+                <p>Protected against potentially malicious or faulty hospital nodes</p>
+                <span class="benefit-status active">
+                    <i class="fas fa-check"></i> Protected
+                </span>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i class="fas fa-file-contract"></i>
+                </div>
+                <h4>Audit Trail</h4>
+                <p>Complete cryptographic logging for regulatory compliance</p>
+                <span class="benefit-status active">
+                    <i class="fas fa-check"></i> Enabled
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Progress Chart -->
+    <section class="progress-section">
+        <div class="progress-chart-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-area"></i>
+                    Model Accuracy Improving Over Time
+                </h3>
+            </div>
+            <div class="card-body">
+                <canvas id="clinicalProgressChart"></canvas>
+            </div>
+            <div class="card-footer">
+                <div class="chart-legend-clinical">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #10b981"></span>
+                        <span>Current Accuracy</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-line"></span>
+                        <span>Target (85%)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security Features -->
+    <section class="security-section">
+        <h2 class="section-title">
+            <i class="fas fa-shield-halved"></i>
+            Security Features Active
+        </h2>
+        <div class="security-grid">
+            {% for feature in security.features %}
+            <div class="security-feature-card active">
+                <div class="feature-icon-large">
+                    <i class="fas fa-{{ feature.icon }}"></i>
+                </div>
+                <h4>{{ feature.name }}</h4>
+                <span class="feature-pulse"></span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- Fairness Overview -->
+    <section class="fairness-section">
+        <h2 class="section-title">
+            <i class="fas fa-balance-scale"></i>
+            Fairness Across Hospitals
+        </h2>
+        <div class="fairness-overview">
+            <div class="fairness-score-large">
+                <div class="score-visual">
+                    <svg viewBox="0 0 100 100" class="score-svg">
+                        <circle class="score-bg" cx="50" cy="50" r="45"/>
+                        <circle class="score-fill" cx="50" cy="50" r="45" 
+                                stroke-dasharray="{{ (fairness.score * 283)|int }} 283"
+                                transform="rotate(-90 50 50)"/>
+                    </svg>
+                    <div class="score-text">
+                        <span class="score-number">{{ format_number(fairness.score * 100, 0) }}%</span>
+                        <span class="score-label">Fairness Score</span>
+                    </div>
+                </div>
+            </div>
+            <div class="fairness-details">
+                <div class="detail-card">
+                    <i class="fas fa-hospital"></i>
+                    <span class="detail-value">{{ format_number(fairness.hospital_variance, 4) }}</span>
+                    <span class="detail-label">Hospital Variance</span>
+                    <span class="detail-status {% if fairness.hospital_variance < 0.05 %}good{% else %}attention{% endif %}">
+                        {% if fairness.hospital_variance < 0.05 %}Low - Good{% else %}Elevated{% endif %}
+                    </span>
+                </div>
+                <div class="detail-card">
+                    <i class="fas fa-equals"></i>
+                    <span class="detail-value">{{ format_number(fairness.accuracy_parity_diff, 3) }}</span>
+                    <span class="detail-label">Accuracy Parity Difference</span>
+                    <span class="detail-status {% if fairness.accuracy_parity_diff < 0.15 %}good{% else %}attention{% endif %}">
+                        {% if fairness.accuracy_parity_diff < 0.15 %}Within Threshold{% else %}Above Threshold{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const chartData = {{ chart_data|tojson }};
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Clinical Progress Chart
+        const ctx = document.getElementById('clinicalProgressChart').getContext('2d');
+        
+        // Create gradient
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+        gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [{
+                    label: 'Model Accuracy (AUC)',
+                    data: chartData.auc,
+                    borderColor: '#10b981',
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 3,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            targetLine: {
+                                type: 'line',
+                                yMin: 0.85,
+                                yMax: 0.85,
+                                borderColor: '#f59e0b',
+                                borderWidth: 2,
+                                borderDash: [10, 5],
+                                label: {
+                                    display: true,
+                                    content: 'Target 85%',
+                                    position: 'end',
+                                    backgroundColor: '#f59e0b',
+                                    color: '#fff'
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { 
+                            display: true, 
+                            text: 'Training Round', 
+                            color: 'rgb(156, 163, 175)',
+                            font: { size: 14, weight: '500' }
+                        },
+                        grid: { color: 'rgba(75, 85, 99, 0.2)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { 
+                            display: true, 
+                            text: 'Diagnostic Accuracy', 
+                            color: 'rgb(156, 163, 175)',
+                            font: { size: 14, weight: '500' }
+                        },
+                        grid: { color: 'rgba(75, 85, 99, 0.2)' },
+                        ticks: { 
+                            color: 'rgb(156, 163, 175)',
+                            callback: value => (value * 100).toFixed(0) + '%'
+                        },
+                        min: 0,
+                        max: 1
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

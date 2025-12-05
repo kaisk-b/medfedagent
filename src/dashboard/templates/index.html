@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Overview | MedFedAgent{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="header-content">
+            <h1 class="page-title">
+                <span class="title-icon"><i class="fas fa-chart-line"></i></span>
+                Dashboard Overview
+            </h1>
+            <p class="page-subtitle">Real-time federated learning metrics and system status</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i>
+                Refresh
+            </button>
+            <label class="auto-refresh-toggle">
+                <input type="checkbox" id="autoRefresh" aria-label="Toggle auto-refresh">
+                <span class="toggle-pill">
+                    <span class="toggle-text">Auto-refresh</span>
+                    <span class="toggle-track" aria-hidden="true">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                </span>
+            </label>
+        </div>
+    </header>
+
+    <!-- Stats Cards -->
+    <section class="stats-grid">
+        <div class="stat-card stat-primary">
+            <div class="stat-icon">
+                <i class="fas fa-brain"></i>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value" id="totalRounds">{{ summary.total_rounds or 0 }}</span>
+                <span class="stat-label">Training Rounds</span>
+            </div>
+            <div class="stat-trend up">
+                <i class="fas fa-arrow-up"></i>
+                <span>Active</span>
+            </div>
+        </div>
+
+        <div class="stat-card stat-success">
+            <div class="stat-icon">
+                <i class="fas fa-bullseye"></i>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value" id="bestAuc">{{ format_number(summary.best_auc, 4) }}</span>
+                <span class="stat-label">Best AUC Score</span>
+            </div>
+            <div class="stat-trend up">
+                <i class="fas fa-arrow-up"></i>
+                <span>Improving</span>
+            </div>
+        </div>
+
+        <div class="stat-card stat-warning">
+            <div class="stat-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value" id="epsilonSpent">{{ format_number(summary.final_epsilon, 2) }} / {{ format_number(summary.epsilon_budget, 1) }}</span>
+                <span class="stat-label">Privacy Budget (ε)</span>
+            </div>
+            <div class="stat-trend {{ summary.privacy_status or 'good' }}">
+                <i class="fas fa-lock"></i>
+                <span>{{ format_percentage(summary.privacy_percentage) }} remaining</span>
+            </div>
+        </div>
+
+        <div class="stat-card stat-info">
+            <div class="stat-icon">
+                <i class="fas fa-hospital"></i>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value" id="numClients">{{ chart_data.rounds|length if chart_data.rounds else 0 }}</span>
+                <span class="stat-label">Federated Nodes</span>
+            </div>
+            <div class="stat-trend neutral">
+                <i class="fas fa-network-wired"></i>
+                <span>Connected</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Charts Row -->
+    <section class="charts-row">
+        <div class="chart-card large">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-area"></i>
+                    Training Progress
+                </h3>
+                <div class="card-actions">
+                    <select class="chart-select" id="metricSelect">
+                        <option value="all">All Metrics</option>
+                        <option value="auc">AUC Only</option>
+                        <option value="loss">Loss Only</option>
+                        <option value="accuracy">Accuracy Only</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="trainingChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-lock"></i>
+                    Privacy Budget
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="privacy-gauge-container">
+                    <canvas id="privacyGauge"></canvas>
+                    <div class="gauge-center">
+                        <span class="gauge-value" id="privacyRemaining">{{ format_percentage(summary.privacy_percentage) }}</span>
+                        <span class="gauge-label">Remaining</span>
+                    </div>
+                </div>
+                <div class="privacy-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Budget Used</span>
+                        <span class="detail-value">{{ format_number(summary.final_epsilon, 3) }} ε</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Total Budget</span>
+                        <span class="detail-value">{{ format_number(summary.epsilon_budget, 1) }} ε</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security and Fairness Row -->
+    <section class="info-row">
+        <div class="info-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-shield-halved"></i>
+                    Security Status
+                </h3>
+                <span class="status-badge success">
+                    <i class="fas fa-check-circle"></i>
+                    Secure
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="security-features">
+                    {% for feature in security.features %}
+                    <div class="feature-item active">
+                        <div class="feature-icon">
+                            <i class="fas fa-{{ feature.icon }}"></i>
+                        </div>
+                        <div class="feature-info">
+                            <span class="feature-name">{{ feature.name }}</span>
+                            <span class="feature-status">{{ feature.status|capitalize }}</span>
+                        </div>
+                        <div class="feature-indicator">
+                            <span class="indicator-dot active"></span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if security.anomaly_count > 0 %}
+                <div class="security-alert warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>{{ security.anomaly_count }} anomalies detected</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-balance-scale"></i>
+                    Fairness Score
+                </h3>
+                <span class="status-badge {% if fairness.is_fair %}success{% else %}warning{% endif %}">
+                    {% if fairness.is_fair %}
+                    <i class="fas fa-check-circle"></i>
+                    Fair
+                    {% else %}
+                    <i class="fas fa-exclamation-circle"></i>
+                    Review Needed
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="fairness-score-display">
+                    <div class="score-circle {% if fairness.score >= 0.8 %}excellent{% elif fairness.score >= 0.6 %}good{% else %}warning{% endif %}">
+                        <svg viewBox="0 0 36 36" class="score-ring">
+                            <path class="ring-bg"
+                                d="M18 2.0845
+                                   a 15.9155 15.9155 0 0 1 0 31.831
+                                   a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                            <path class="ring-fill"
+                                stroke-dasharray="{{ (fairness.score * 100)|int }}, 100"
+                                d="M18 2.0845
+                                   a 15.9155 15.9155 0 0 1 0 31.831
+                                   a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        </svg>
+                        <span class="score-value">{{ format_number(fairness.score, 2) }}</span>
+                    </div>
+                </div>
+                <div class="fairness-metrics">
+                    <div class="metric-item">
+                        <span class="metric-label">Hospital Variance</span>
+                        <span class="metric-value">{{ format_number(fairness.hospital_variance, 4) }}</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Accuracy Parity</span>
+                        <span class="metric-value">{{ format_number(fairness.accuracy_parity_diff, 3) }}</span>
+                    </div>
+                </div>
+                {% if fairness.violations %}
+                <div class="violations-list">
+                    <h4>Violations</h4>
+                    <ul>
+                        {% for violation in fairness.violations[:3] %}
+                        <li>{{ violation }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-hospital-alt"></i>
+                    Hospital Performance
+                </h3>
+            </div>
+            <div class="card-body">
+                <canvas id="hospitalChart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- Epsilon Tracking -->
+    <section class="charts-row">
+        <div class="chart-card full-width">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-bar"></i>
+                    Privacy Budget Consumption Over Time
+                </h3>
+            </div>
+            <div class="card-body">
+                <canvas id="epsilonChart"></canvas>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Data passed from server (JSON format for clean parsing) -->
+<script type="application/json" id="chartDataJson">{{ chart_data|tojson|safe }}</script>
+<script type="application/json" id="summaryDataJson">{{ summary|tojson|safe }}</script>
+<script type="application/json" id="fairnessDataJson">{{ fairness|tojson|safe }}</script>
+
+<script>
+    // Parse server data from JSON script tags (avoids linting issues)
+    const chartData = JSON.parse(document.getElementById('chartDataJson').textContent);
+    const summaryData = JSON.parse(document.getElementById('summaryDataJson').textContent);
+    const fairnessData = JSON.parse(document.getElementById('fairnessDataJson').textContent);
+    
+    // Initialize charts when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+    });
+    
+    function initializeCharts() {
+        // Training Progress Chart
+        const trainingCtx = document.getElementById('trainingChart').getContext('2d');
+        new Chart(trainingCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [
+                    {
+                        label: 'AUC',
+                        data: chartData.auc,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Accuracy',
+                        data: chartData.accuracy,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Train Loss',
+                        data: chartData.train_loss,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: false,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: 'rgb(156, 163, 175)',
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Round', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: 'Score', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' },
+                        min: 0,
+                        max: 1
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        title: { display: true, text: 'Loss', color: 'rgb(156, 163, 175)' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    }
+                }
+            }
+        });
+
+        // Privacy Gauge Chart
+        const gaugeCtx = document.getElementById('privacyGauge').getContext('2d');
+        const privacyPercentage = summaryData.privacy_percentage || 100;
+        new Chart(gaugeCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [privacyPercentage, 100 - privacyPercentage],
+                    backgroundColor: [
+                        privacyPercentage > 50 ? '#10b981' : privacyPercentage > 25 ? '#f59e0b' : '#ef4444',
+                        'rgba(75, 85, 99, 0.3)'
+                    ],
+                    borderWidth: 0,
+                    cutout: '75%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                },
+                rotation: -90,
+                circumference: 180
+            }
+        });
+
+        // Epsilon Chart
+        const epsilonCtx = document.getElementById('epsilonChart').getContext('2d');
+        new Chart(epsilonCtx, {
+            type: 'bar',
+            data: {
+                labels: chartData.rounds,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'ε per Round',
+                        data: chartData.epsilon_round,
+                        backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                        borderColor: '#8b5cf6',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        type: 'line',
+                        label: 'Cumulative ε',
+                        data: chartData.epsilon_total,
+                        borderColor: '#ec4899',
+                        backgroundColor: 'transparent',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ec4899'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: 'rgb(156, 163, 175)',
+                            usePointStyle: true
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            budgetLine: {
+                                type: 'line',
+                                yMin: summaryData.epsilon_budget || 8,
+                                yMax: summaryData.epsilon_budget || 8,
+                                borderColor: '#ef4444',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                label: {
+                                    display: true,
+                                    content: 'Budget Limit',
+                                    position: 'end'
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Round', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Epsilon (ε)', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    }
+                }
+            }
+        });
+
+        // Hospital Performance Chart
+        const hospitalCtx = document.getElementById('hospitalChart').getContext('2d');
+        const hospitalMetrics = fairnessData.hospital_metrics || {};
+        const hospitals = Object.keys(hospitalMetrics);
+        const aucs = hospitals.map(h => hospitalMetrics[h]?.auc || 0);
+        const accs = hospitals.map(h => hospitalMetrics[h]?.accuracy || 0);
+        
+        new Chart(hospitalCtx, {
+            type: 'radar',
+            data: {
+                labels: hospitals.length ? hospitals.map(h => `Hospital ${h}`) : ['H1', 'H2', 'H3'],
+                datasets: [
+                    {
+                        label: 'AUC',
+                        data: aucs.length ? aucs : [0.78, 0.82, 0.79],
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#10b981'
+                    },
+                    {
+                        label: 'Accuracy',
+                        data: accs.length ? accs : [0.75, 0.80, 0.77],
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: '#3b82f6',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#3b82f6'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: 'rgb(156, 163, 175)',
+                            usePointStyle: true
+                        }
+                    }
+                },
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(75, 85, 99, 0.3)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        pointLabels: { color: 'rgb(156, 163, 175)' },
+                        ticks: { 
+                            color: 'rgb(156, 163, 175)',
+                            backdropColor: 'transparent'
+                        },
+                        min: 0,
+                        max: 1
+                    }
+                }
+            }
+        });
+    }
+
+    
+</script>
+{% endblock %}

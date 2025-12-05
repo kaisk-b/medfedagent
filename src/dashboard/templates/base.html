@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MedFedAgent Dashboard{% endblock %}</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+    
+    <!-- Chart.js Annotation Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="bg-gradient"></div>
+        <div class="bg-grid"></div>
+        <div class="floating-orbs">
+            <div class="orb orb-1"></div>
+            <div class="orb orb-2"></div>
+            <div class="orb orb-3"></div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="brand-icon">
+                <i class="fas fa-hospital-user"></i>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">MedFedAgent</span>
+                <span class="brand-tagline">Secure Federated Learning</span>
+            </div>
+        </div>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                <i class="fas fa-chart-line"></i>
+                <span>Overview</span>
+            </a>
+            <a href="{{ url_for('training') }}" class="nav-link {% if request.endpoint == 'training' %}active{% endif %}">
+                <i class="fas fa-play-circle"></i>
+                <span>Training</span>
+            </a>
+            <a href="{{ url_for('clinical') }}" class="nav-link {% if request.endpoint == 'clinical' %}active{% endif %}">
+                <i class="fas fa-stethoscope"></i>
+                <span>Clinical</span>
+            </a>
+            <a href="{{ url_for('technical') }}" class="nav-link {% if request.endpoint == 'technical' %}active{% endif %}">
+                <i class="fas fa-cogs"></i>
+                <span>Technical</span>
+            </a>
+            <a href="{{ url_for('privacy') }}" class="nav-link {% if request.endpoint == 'privacy' %}active{% endif %}">
+                <i class="fas fa-shield-halved"></i>
+                <span>Privacy</span>
+            </a>
+            <a href="{{ url_for('fairness') }}" class="nav-link {% if request.endpoint == 'fairness' %}active{% endif %}">
+                <i class="fas fa-balance-scale"></i>
+                <span>Fairness</span>
+            </a>
+        </div>
+        
+        <div class="nav-actions">
+            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                <i class="fas fa-moon"></i>
+            </button>
+            <div class="status-indicator {% if has_data %}online{% else %}offline{% endif %}">
+                <span class="status-dot"></span>
+                <span class="status-text">{% if has_data %}Live{% else %}Offline{% endif %}</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-left">
+                <span class="footer-brand">
+                    <i class="fas fa-hospital-user"></i>
+                    MedFedAgent
+                </span>
+                <span class="footer-divider">|</span>
+                <span class="footer-text">Privacy-Preserving Healthcare AI</span>
+            </div>
+            <div class="footer-right">
+                <span class="last-updated">
+                    <i class="fas fa-clock"></i>
+                    Last updated: <span id="lastUpdated">{{ last_updated }}</span>
+                </span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

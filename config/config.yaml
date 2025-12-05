@@ -1,0 +1,137 @@
+federated:
+  num_clients: 3
+  num_rounds: 4
+  fraction_fit: 1.0
+  fraction_evaluate: 1.0
+  min_fit_clients: 3
+  min_evaluate_clients: 3
+  min_available_clients: 3
+model:
+  name: simple_cnn
+  pretrained: false
+  num_classes: 2
+  dropout: 0.3
+  freeze_backbone: false
+training:
+  local_epochs: 2
+  local_steps: 50
+  batch_size: 64
+  learning_rate: 0.01
+  weight_decay: 0.0001
+  optimizer: adam
+  scheduler: cosine
+  grad_clip_norm: 1.5
+privacy:
+  enabled: true
+  epsilon_budget: 50
+  delta: 1.0e-05
+  max_grad_norm: 1.0
+  noise_multiplier: 0.8
+  secure_mode: false
+orchestrator:
+  budget_warning_threshold: 0.75
+  budget_critical_threshold: 0.9
+  noise_increase_factor: 1.1
+  enable_anomaly_detection: true
+  anomaly_zscore_threshold: 3.0
+  log_level: INFO
+data:
+  dataset: chestxray
+  data_dir: ./data
+  image_size: 128
+  train_split: 0.8
+  samples_per_client: 600
+  use_realistic: true
+  label_noise: 0.08
+  class_overlap: 0.25
+  non_iid:
+    enabled: true
+    alpha: 0.5
+  nodes:
+  - name: Hospital_A
+    samples: 1000
+    pathology_bias: cardiomegaly
+  - name: Hospital_B
+    samples: 1000
+    pathology_bias: pneumonia
+  - name: Hospital_C
+    samples: 1000
+    pathology_bias: balanced
+evaluation:
+  metrics:
+  - auc_roc
+  - accuracy
+  - precision
+  - recall
+  - f1
+  evaluate_every: 1
+  save_best_model: true
+dashboard:
+  port: 8501
+  refresh_interval: 5
+  show_per_node_metrics: true
+  show_privacy_budget: true
+  clinical_mode: true
+secure_aggregation:
+  enabled: true
+  min_clients: 2
+  threshold: 2
+  use_masking: true
+  simulate_encryption: true
+  audit_enabled: true
+robust_aggregation:
+  enabled: true
+  method: trimmed_mean
+  num_byzantine: 0
+  trim_ratio: 0.1
+  multi_krum_k: 1
+  enable_detection: true
+  detection_threshold: 3.0
+privacy_audit:
+  enabled: true
+  attack_types:
+  - threshold
+  - loss_based
+output:
+  results_dir: ./results
+  checkpoints_dir: ./checkpoints
+  logs_dir: ./logs
+  save_round_logs: true
+  save_model_each_round: false
+experiment:
+  name: medfedagent_v1
+  seed: 42
+  device: auto
+fairness:
+  enabled: true
+  evaluate_every: 1
+  thresholds:
+    demographic_parity: 0.1
+    equalized_odds: 0.1
+    accuracy_parity: 0.15
+    disparate_impact_min: 0.8
+    disparate_impact_max: 1.25
+    hospital_variance: 0.05
+  demographic_groups:
+  - age_group
+  - sex
+  - hospital
+  hospital_demographics:
+    Hospital_A:
+      age_bias:
+        60+: 0.4
+      sex_bias:
+        M: 0.55
+    Hospital_B:
+      age_bias:
+        18-40: 0.4
+      sex_bias:
+        M: 0.45
+    Hospital_C:
+      age_bias: null
+      sex_bias:
+        M: 0.5
+  on_violation:
+    log_warning: true
+    adjust_weights: false
+    halt_training: false

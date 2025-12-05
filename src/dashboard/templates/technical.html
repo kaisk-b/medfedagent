@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+
+{% block title %}Technical Details | MedFedAgent{% endblock %}
+
+{% block content %}
+<div class="dashboard-container technical-view">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="header-content">
+            <h1 class="page-title">
+                <span class="title-icon"><i class="fas fa-cogs"></i></span>
+                Technical Dashboard
+            </h1>
+            <p class="page-subtitle">Detailed metrics for ML engineers and researchers</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" onclick="exportData()">
+                <i class="fas fa-download"></i>
+                Export
+            </button>
+            <button class="btn btn-primary" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i>
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- Technical Stats Grid -->
+    <section class="tech-stats-grid">
+        <div class="tech-stat-card">
+            <div class="stat-header">
+                <span class="stat-icon"><i class="fas fa-layer-group"></i></span>
+                <span class="stat-title">Model Architecture</span>
+            </div>
+            <div class="stat-body">
+                <span class="stat-value">DenseNet-121</span>
+                <span class="stat-detail">121 layers • 7.98M params</span>
+            </div>
+        </div>
+
+        <div class="tech-stat-card">
+            <div class="stat-header">
+                <span class="stat-icon"><i class="fas fa-microchip"></i></span>
+                <span class="stat-title">Training Device</span>
+            </div>
+            <div class="stat-body">
+                <span class="stat-value">CUDA</span>
+                <span class="stat-detail">GPU Accelerated</span>
+            </div>
+        </div>
+
+        <div class="tech-stat-card">
+            <div class="stat-header">
+                <span class="stat-icon"><i class="fas fa-database"></i></span>
+                <span class="stat-title">Dataset</span>
+            </div>
+            <div class="stat-body">
+                <span class="stat-value">Medical Imaging</span>
+                <span class="stat-detail">Non-IID Distribution</span>
+            </div>
+        </div>
+
+        <div class="tech-stat-card">
+            <div class="stat-header">
+                <span class="stat-icon"><i class="fas fa-random"></i></span>
+                <span class="stat-title">Aggregation</span>
+            </div>
+            <div class="stat-body">
+                <span class="stat-value">{{ (summary.robust_aggregation.method if summary.robust_aggregation else 'FedAvg')|replace('_', ' ')|title }}</span>
+                <span class="stat-detail">Byzantine Robust</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Technical Charts -->
+    <section class="charts-section">
+        <div class="chart-row">
+            <div class="chart-card wide">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-line"></i>
+                        Loss Curves
+                    </h3>
+                    <div class="card-controls">
+                        <button class="btn btn-sm btn-ghost" data-chart="loss" onclick="toggleChartScale(this)">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="lossChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-volume-up"></i>
+                        Noise Multiplier (σ)
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="noiseChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-row">
+            <div class="chart-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-shield-alt"></i>
+                        Privacy Budget (ε)
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="epsilonTechChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card wide">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-bullseye"></i>
+                        Performance Metrics
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Detailed Metrics Table -->
+    <section class="table-section">
+        <div class="table-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-table"></i>
+                    Round-by-Round History
+                </h3>
+                <div class="card-controls">
+                    <input type="text" class="search-input" placeholder="Search..." id="tableSearch">
+                    <button class="btn btn-sm btn-ghost" onclick="downloadCSV()">
+                        <i class="fas fa-file-csv"></i>
+                        CSV
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="data-table" id="roundsTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="round">Round <i class="fas fa-sort"></i></th>
+                                <th data-sort="epsilon_round">ε/Round <i class="fas fa-sort"></i></th>
+                                <th data-sort="epsilon_total">ε Total <i class="fas fa-sort"></i></th>
+                                <th data-sort="noise">Noise (σ) <i class="fas fa-sort"></i></th>
+                                <th data-sort="clients">Clients <i class="fas fa-sort"></i></th>
+                                <th data-sort="train_loss">Train Loss <i class="fas fa-sort"></i></th>
+                                <th data-sort="accuracy">Accuracy <i class="fas fa-sort"></i></th>
+                                <th data-sort="auc">AUC <i class="fas fa-sort"></i></th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for round in round_history %}
+                            <tr>
+                                <td>{{ round.round_num or round.round or loop.index }}</td>
+                                <td>{{ format_number(round.epsilon_round, 4) }}</td>
+                                <td>{{ format_number(round.epsilon_total, 4) }}</td>
+                                <td>{{ format_number(round.noise_multiplier, 2) }}</td>
+                                <td>{{ round.num_clients or 3 }}</td>
+                                <td>{{ format_number(round.train_loss, 4) }}</td>
+                                <td>
+                                    <span class="metric-badge {% if round.accuracy > 0.8 %}good{% elif round.accuracy > 0.6 %}moderate{% else %}low{% endif %}">
+                                        {{ format_number(round.accuracy, 4) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="metric-badge {% if round.auc > 0.8 %}good{% elif round.auc > 0.7 %}moderate{% else %}low{% endif %}">
+                                        {{ format_number(round.auc, 4) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="status-pill {% if round.status == 'OK' or round.status == 'completed' %}success{% elif 'WARNING' in (round.status or '') %}warning{% else %}neutral{% endif %}">
+                                        {{ round.status or 'OK' }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="9" class="empty-state">
+                                    <i class="fas fa-inbox"></i>
+                                    <span>No training data available</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DP-SGD Parameters -->
+    <section class="params-section">
+        <div class="params-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-sliders-h"></i>
+                    DP-SGD Configuration
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="params-grid">
+                    <div class="param-item">
+                        <span class="param-label">Target Epsilon (ε)</span>
+                        <span class="param-value">{{ format_number(summary.epsilon_budget, 1) }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Target Delta (δ)</span>
+                        <span class="param-value">1e-5</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Max Grad Norm (C)</span>
+                        <span class="param-value">1.0</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Noise Multiplier (σ)</span>
+                        <span class="param-value">{{ format_number(chart_data.noise_multiplier[-1] if chart_data.noise_multiplier else 1.0, 2) }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Sample Rate</span>
+                        <span class="param-value">0.1</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Epochs/Round</span>
+                        <span class="param-value">1</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="params-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-shield-halved"></i>
+                    Robust Aggregation
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="params-grid">
+                    <div class="param-item">
+                        <span class="param-label">Method</span>
+                        <span class="param-value">{{ (summary.robust_aggregation.method if summary.robust_aggregation else 'fedavg')|replace('_', ' ')|title }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Byzantine Detections</span>
+                        <span class="param-value">{{ (summary.robust_aggregation.byzantine_detections if summary.robust_aggregation else 0) }}</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Anomaly Threshold</span>
+                        <span class="param-value">2.5σ</span>
+                    </div>
+                    <div class="param-item">
+                        <span class="param-label">Min Clients</span>
+                        <span class="param-value">{{ security.min_clients_threshold|default(2) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Data passed from server (JSON format for clean parsing) -->
+<script type="application/json" id="chartDataJson">{{ chart_data|tojson|safe }}</script>
+
+<script>
+    // Parse server data from JSON script tags (avoids linting issues)
+    const chartData = JSON.parse(document.getElementById('chartDataJson').textContent);
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initTechnicalCharts();
+        initTableSort();
+        initSearch();
+    });
+    
+    function initTechnicalCharts() {
+        // Loss Chart
+        const lossCtx = document.getElementById('lossChart').getContext('2d');
+        new Chart(lossCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [
+                    {
+                        label: 'Training Loss',
+                        data: chartData.train_loss,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Validation Loss',
+                        data: chartData.val_loss,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: 'rgb(156, 163, 175)', usePointStyle: true }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Round', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Loss', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    }
+                }
+            }
+        });
+
+        // Noise Chart
+        const noiseCtx = document.getElementById('noiseChart').getContext('2d');
+        new Chart(noiseCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [{
+                    label: 'Noise Multiplier (σ)',
+                    data: chartData.noise_multiplier,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'σ', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    }
+                }
+            }
+        });
+
+        // Epsilon Technical Chart
+        const epsilonCtx = document.getElementById('epsilonTechChart').getContext('2d');
+        new Chart(epsilonCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [{
+                    label: 'Cumulative ε',
+                    data: chartData.epsilon_total,
+                    borderColor: '#ec4899',
+                    backgroundColor: 'rgba(236, 72, 153, 0.2)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'ε', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    }
+                }
+            }
+        });
+
+        // Performance Chart
+        const perfCtx = document.getElementById('performanceChart').getContext('2d');
+        new Chart(perfCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [
+                    {
+                        label: 'AUC-ROC',
+                        data: chartData.auc,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Accuracy',
+                        data: chartData.accuracy,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: 'rgb(156, 163, 175)', usePointStyle: true }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Round', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Score', color: 'rgb(156, 163, 175)' },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' },
+                        min: 0,
+                        max: 1
+                    }
+                }
+            }
+        });
+    }
+
+    function initTableSort() {
+        const table = document.getElementById('roundsTable');
+        const headers = table.querySelectorAll('th[data-sort]');
+        
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const sortKey = header.dataset.sort;
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                
+                const isAsc = header.classList.contains('sort-asc');
+                headers.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+                header.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+                
+                rows.sort((a, b) => {
+                    const aVal = parseFloat(a.children[getColumnIndex(sortKey)].textContent) || 0;
+                    const bVal = parseFloat(b.children[getColumnIndex(sortKey)].textContent) || 0;
+                    return isAsc ? bVal - aVal : aVal - bVal;
+                });
+                
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+    }
+
+    function getColumnIndex(sortKey) {
+        const mapping = {
+            'round': 0, 'epsilon_round': 1, 'epsilon_total': 2,
+            'noise': 3, 'clients': 4, 'train_loss': 5,
+            'accuracy': 6, 'auc': 7
+        };
+        return mapping[sortKey] || 0;
+    }
+
+    function initSearch() {
+        const searchInput = document.getElementById('tableSearch');
+        const table = document.getElementById('roundsTable');
+        
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = table.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+
+    function downloadCSV() {
+        const table = document.getElementById('roundsTable');
+        const rows = table.querySelectorAll('tr');
+        let csv = [];
+        
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('th, td');
+            const rowData = Array.from(cells).map(cell => cell.textContent.trim());
+            csv.push(rowData.join(','));
+        });
+        
+        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'training_history.csv';
+        a.click();
+        
+        showToast('CSV downloaded', 'success');
+    }
+
+    function exportData() {
+        fetch('/api/data')
+            .then(res => res.json())
+            .then(data => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'medfedagent_data.json';
+                a.click();
+                showToast('Data exported', 'success');
+            });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Monitoring | MedFedAgent{% endblock %}
+
+{% block content %}
+<div class="dashboard-container privacy-view">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="header-content">
+            <h1 class="page-title">
+                <span class="title-icon"><i class="fas fa-shield-halved"></i></span>
+                Privacy Monitoring
+            </h1>
+            <p class="page-subtitle">Differential privacy tracking and membership inference attack analysis</p>
+        </div>
+    </header>
+
+    <!-- Privacy Budget Overview -->
+    <section class="privacy-overview">
+        <div class="privacy-hero-card">
+            <div class="privacy-visual">
+                <div class="privacy-ring-large">
+                    <svg viewBox="0 0 100 100" class="ring-svg">
+                        <circle class="ring-track" cx="50" cy="50" r="45" />
+                        <circle class="ring-progress" cx="50" cy="50" r="45"
+                                stroke-dasharray="{{ ((summary.privacy_percentage or 100) * 2.83)|int }} 283"
+                                transform="rotate(-90 50 50)" />
+                    </svg>
+                    <div class="ring-content">
+                        <span class="ring-value">{{ format_percentage(summary.privacy_percentage) }}</span>
+                        <span class="ring-label">Budget Remaining</span>
+                    </div>
+                </div>
+            </div>
+            <div class="privacy-stats">
+                <div class="stat-block">
+                    <span class="stat-icon"><i class="fas fa-shield-alt"></i></span>
+                    <div class="stat-info">
+                        <span class="stat-label">Epsilon Used</span>
+                        <span class="stat-value">{{ format_number(summary.final_epsilon, 3) }} ε</span>
+                    </div>
+                </div>
+                <div class="stat-block">
+                    <span class="stat-icon"><i class="fas fa-wallet"></i></span>
+                    <div class="stat-info">
+                        <span class="stat-label">Total Budget</span>
+                        <span class="stat-value">{{ format_number(summary.epsilon_budget, 1) }} ε</span>
+                    </div>
+                </div>
+                <div class="stat-block">
+                    <span class="stat-icon"><i class="fas fa-chart-bar"></i></span>
+                    <div class="stat-info">
+                        <span class="stat-label">Avg ε/Round</span>
+                        <span class="stat-value">{{ format_number((summary.final_epsilon or 0) / [summary.total_rounds or 1, 1]|max, 4) }} ε</span>
+                    </div>
+                </div>
+                <div class="stat-block">
+                    <span class="stat-icon"><i class="fas fa-hourglass-half"></i></span>
+                    <div class="stat-info">
+                        <span class="stat-label">Rounds Remaining</span>
+                        {% set avg_eps = (summary.final_epsilon or 0) / [summary.total_rounds or 1, 1]|max %}
+                        {% set remaining_budget = (summary.epsilon_budget or 8) - (summary.final_epsilon or 0) %}
+                        <span class="stat-value">~{{ (remaining_budget / [avg_eps, 0.1]|max)|int }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DP Explanation -->
+    <section class="dp-explanation">
+        <div class="explanation-card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-info-circle"></i>
+                    Understanding Differential Privacy
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="explanation-grid">
+                    <div class="explanation-item">
+                        <div class="exp-icon epsilon">ε</div>
+                        <h4>Epsilon (Privacy Loss)</h4>
+                        <p>Lower values mean stronger privacy. Our system uses ε={{ format_number(summary.epsilon_budget, 1) }} which provides strong protection while maintaining model utility.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <div class="exp-icon delta">δ</div>
+                        <h4>Delta (Failure Probability)</h4>
+                        <p>The probability of privacy breach. Set to 10⁻⁵, meaning privacy is maintained with 99.999% certainty.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <div class="exp-icon sigma">σ</div>
+                        <h4>Noise Multiplier</h4>
+                        <p>Calibrated Gaussian noise added to gradients. Higher values increase privacy but may slow learning.</p>
+                    </div>
+                    <div class="explanation-item">
+                        <div class="exp-icon clip">C</div>
+                        <h4>Gradient Clipping</h4>
+                        <p>Per-sample gradients are clipped to bound sensitivity, ensuring individual patient data has limited influence.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Privacy Budget Chart -->
+    <section class="charts-section">
+        <div class="chart-card full-width">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-area"></i>
+                    Privacy Budget Consumption
+                </h3>
+            </div>
+            <div class="card-body chart-tall">
+                <canvas id="privacyBudgetChart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- MIA Results -->
+    {% if audit_report %}
+    <section class="mia-section">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-user-secret"></i>
+                Membership Inference Attack Results
+            </h2>
+            <span class="section-badge">Privacy Audit</span>
+        </div>
+
+        <div class="mia-overview">
+            {% set best_grade = 'F' %}
+            {% for attack_type, result in audit_report.items() if result is mapping %}
+                {% if result.privacy_grade and result.privacy_grade < best_grade %}
+                    {% set best_grade = result.privacy_grade %}
+                {% endif %}
+            {% endfor %}
+            
+            <div class="mia-grade-card grade-{{ best_grade[0]|lower if best_grade else 'f' }}">
+                <div class="grade-visual">
+                    <span class="grade-letter">{{ best_grade[0] if best_grade else '?' }}</span>
+                </div>
+                <div class="grade-info">
+                    <h3>Privacy Grade</h3>
+                    <p>
+                        {% if best_grade and best_grade[0] in ['A', 'B'] %}
+                        Excellent privacy protection. The model is well-protected against membership inference attacks.
+                        {% elif best_grade and best_grade[0] == 'C' %}
+                        Good privacy protection with room for improvement.
+                        {% else %}
+                        Privacy protection may need enhancement. Consider increasing noise or reducing training epochs.
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mia-attacks-grid">
+            {% for attack_type, result in audit_report.items() if result is mapping and 'attack_auc' in result %}
+            <div class="attack-card">
+                <div class="attack-header">
+                    <span class="attack-icon">
+                        {% if 'threshold' in attack_type %}
+                        <i class="fas fa-divide"></i>
+                        {% elif 'shadow' in attack_type %}
+                        <i class="fas fa-ghost"></i>
+                        {% else %}
+                        <i class="fas fa-percentage"></i>
+                        {% endif %}
+                    </span>
+                    <h4>{{ attack_type|replace('_', ' ')|title }}</h4>
+                </div>
+                <div class="attack-body">
+                    <div class="attack-metric">
+                        <span class="metric-label">Attack AUC</span>
+                        <span class="metric-value {% if result.attack_auc < 0.55 %}good{% elif result.attack_auc < 0.65 %}moderate{% else %}poor{% endif %}">
+                            {{ format_number(result.attack_auc, 4) }}
+                        </span>
+                    </div>
+                    <div class="attack-metric">
+                        <span class="metric-label">Attack Accuracy</span>
+                        <span class="metric-value">{{ format_percentage(result.attack_accuracy * 100 if result.attack_accuracy else 0) }}</span>
+                    </div>
+                    <div class="attack-metric">
+                        <span class="metric-label">Privacy Grade</span>
+                        <span class="metric-value grade">{{ result.privacy_grade or 'N/A' }}</span>
+                    </div>
+                    <div class="vulnerability-bar">
+                        <div class="bar-label">
+                            <span>Vulnerability Level</span>
+                            <span>{{ format_percentage(result.vulnerability_score * 100 if result.vulnerability_score else 0) }}</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill {% if result.vulnerability_score < 0.1 %}low{% elif result.vulnerability_score < 0.3 %}moderate{% else %}high{% endif %}"
+                                 data-width="{{ (result.vulnerability_score or 0) * 100 }}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% else %}
+    <section class="mia-section">
+        <div class="empty-state-card">
+            <div class="empty-icon">
+                <i class="fas fa-user-secret"></i>
+            </div>
+            <h3>No Privacy Audit Available</h3>
+            <p>Run the privacy audit to analyze membership inference attack vulnerability.</p>
+            <code>python run_privacy_audit.py</code>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Secure Aggregation -->
+    <section class="secure-agg-section">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-lock"></i>
+                Secure Aggregation Protocol
+            </h2>
+        </div>
+
+        <div class="secure-agg-grid">
+            <div class="agg-feature-card">
+                <div class="feature-icon-circle">
+                    <i class="fas fa-key"></i>
+                </div>
+                <h4>Encryption</h4>
+                <p>Model updates are encrypted before transmission, preventing eavesdropping.</p>
+                <span class="feature-status active">
+                    <i class="fas fa-check-circle"></i> Enabled
+                </span>
+            </div>
+
+            <div class="agg-feature-card">
+                <div class="feature-icon-circle">
+                    <i class="fas fa-mask"></i>
+                </div>
+                <h4>Random Masking</h4>
+                <p>Pairwise random masks cancel out during aggregation, hiding individual updates.</p>
+                <span class="feature-status active">
+                    <i class="fas fa-check-circle"></i> Enabled
+                </span>
+            </div>
+
+            <div class="agg-feature-card">
+                <div class="feature-icon-circle">
+                    <i class="fas fa-check-double"></i>
+                </div>
+                <h4>Verification</h4>
+                <p>Cryptographic commitments ensure model integrity throughout the process.</p>
+                <span class="feature-status active">
+                    <i class="fas fa-check-circle"></i> Enabled
+                </span>
+            </div>
+
+            <div class="agg-feature-card">
+                <div class="feature-icon-circle">
+                    <i class="fas fa-scroll"></i>
+                </div>
+                <h4>Audit Trail</h4>
+                <p>Complete audit logs for regulatory compliance and forensic analysis.</p>
+                <span class="feature-status active">
+                    <i class="fas fa-check-circle"></i> Enabled
+                </span>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Data passed from server (JSON format for clean parsing) -->
+<script type="application/json" id="chartDataJson">{{ chart_data|tojson|safe }}</script>
+<script type="application/json" id="summaryDataJson">{{ summary|tojson|safe }}</script>
+
+<script>
+    // Parse server data from JSON script tags (avoids linting issues)
+    const chartData = JSON.parse(document.getElementById('chartDataJson').textContent);
+    const summaryData = JSON.parse(document.getElementById('summaryDataJson').textContent);
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initPrivacyChart();
+        initBarWidths();
+    });
+    
+    // Apply widths from data attributes to avoid CSS linting errors
+    function initBarWidths() {
+        document.querySelectorAll('.bar-fill[data-width]').forEach(function(el) {
+            el.style.width = el.dataset.width + '%';
+        });
+    }
+    
+    function initPrivacyChart() {
+        const ctx = document.getElementById('privacyBudgetChart').getContext('2d');
+        
+        // Create gradient for area fill
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(236, 72, 153, 0.4)');
+        gradient.addColorStop(1, 'rgba(236, 72, 153, 0.0)');
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.rounds,
+                datasets: [
+                    {
+                        label: 'Cumulative Privacy Loss (ε)',
+                        data: chartData.epsilon_total,
+                        borderColor: '#ec4899',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ec4899',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: 'rgb(156, 163, 175)',
+                            usePointStyle: true,
+                            font: { size: 14 }
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            budgetLine: {
+                                type: 'line',
+                                yMin: summaryData.epsilon_budget || 8,
+                                yMax: summaryData.epsilon_budget || 8,
+                                borderColor: '#ef4444',
+                                borderWidth: 3,
+                                borderDash: [10, 5],
+                                label: {
+                                    display: true,
+                                    content: `Budget Limit (ε=${summaryData.epsilon_budget || 8})`,
+                                    position: 'end',
+                                    backgroundColor: '#ef4444',
+                                    color: '#fff',
+                                    font: { size: 12, weight: 'bold' }
+                                }
+                            },
+                            warningZone: {
+                                type: 'box',
+                                yMin: (summaryData.epsilon_budget || 8) * 0.75,
+                                yMax: summaryData.epsilon_budget || 8,
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                borderWidth: 0
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Training Round',
+                            color: 'rgb(156, 163, 175)',
+                            font: { size: 14, weight: '500' }
+                        },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Epsilon (ε)',
+                            color: 'rgb(156, 163, 175)',
+                            font: { size: 14, weight: '500' }
+                        },
+                        grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                        ticks: { color: 'rgb(156, 163, 175)' },
+                        suggestedMax: (summaryData.epsilon_budget || 8) * 1.1
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

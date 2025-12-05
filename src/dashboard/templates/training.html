@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+
+{% block title %}Training Control | MedFedAgent{% endblock %}
+
+{% block content %}
+<div class="training-dashboard">
+    <section class="training-hero">
+        <div>
+            <p class="hero-eyebrow">Secure Federated Pipeline</p>
+            <h1>Training Orchestrator</h1>
+            <p class="hero-copy">Monitor rounds in real time, stream privacy metrics, and adjust configuration without leaving the dashboard.</p>
+        </div>
+        <div class="hero-meta">
+            <div class="status-chip {{ training_state.status|default('idle') }}" id="heroStatus">
+                {{ training_state.status|default('Idle')|capitalize }}
+            </div>
+            <span class="hero-timestamp">Last updated {{ last_updated }}</span>
+        </div>
+    </section>
+
+    <section class="training-layout">
+        <div class="training-primary">
+            <article class="training-card status-card">
+                <header class="card-header">
+                    <div>
+                        <p class="card-eyebrow">Training Status</p>
+                        <h2 id="statusHeading">{{ training_state.status|default('Idle')|capitalize }}</h2>
+                    </div>
+                    <div class="status-pill" id="statusChip">{{ training_state.status|default('Idle')|capitalize }}</div>
+                </header>
+                <div class="progress-bar">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-meta">
+                        <span id="roundCounter">Round 0 / 0</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                </div>
+                <dl class="status-grid">
+                    <div>
+                        <dt>Status</dt>
+                        <dd id="statusLabel">{{ training_state.status|default('Idle')|capitalize }}</dd>
+                    </div>
+                    <div>
+                        <dt>Message</dt>
+                        <dd id="statusMessage">{{ training_state.message|default('Ready to start') }}</dd>
+                    </div>
+                </dl>
+                <div class="status-actions">
+                    <button class="btn btn-primary" id="startBtn" onclick="startTraining()">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button class="btn btn-warning" id="pauseBtn" onclick="pauseTraining()" disabled style="display: none;">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button class="btn btn-success" id="resumeBtn" onclick="resumeTraining()" disabled style="display: none;">
+                        <i class="fas fa-play"></i> Resume
+                    </button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopTraining()" disabled>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    <button class="btn btn-ghost" id="resetBtn" onclick="resetTraining()">
+                        <i class="fas fa-power-off"></i> Reset
+                    </button>
+                </div>
+            </article>
+
+            <article class="training-card metrics-card">
+                <header class="card-header">
+                    <div>
+                        <p class="card-eyebrow">Live Metrics</p>
+                        <h2>Performance Snapshot</h2>
+                    </div>
+                    <div class="refresh-dot" id="refreshDot"></div>
+                </header>
+                <div class="metrics-grid">
+                    <div class="metric" data-type="auc">
+                        <div class="metric-label">AUC</div>
+                        <div class="metric-value" id="liveAuc">-</div>
+                    </div>
+                    <div class="metric" data-type="acc">
+                        <div class="metric-label">Accuracy</div>
+                        <div class="metric-value" id="liveAccuracy">-</div>
+                    </div>
+                    <div class="metric" data-type="loss">
+                        <div class="metric-label">Loss</div>
+                        <div class="metric-value" id="liveLoss">-</div>
+                    </div>
+                    <div class="metric" data-type="epsilon">
+                        <div class="metric-label">ε Spent</div>
+                        <div class="metric-value" id="liveEpsilon">-</div>
+                    </div>
+                </div>
+            </article>
+
+            <article class="training-card log-card">
+                <header class="card-header">
+                    <div>
+                        <p class="card-eyebrow">Streaming Output</p>
+                        <h2>Training Log</h2>
+                    </div>
+                    <div class="log-actions">
+                        <button class="btn btn-ghost" onclick="clearLog()" title="Clear log">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="btn btn-ghost" onclick="copyLog()" title="Copy log">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button class="btn btn-ghost" onclick="fetchTrainingLogs(true)" title="Refresh">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                </header>
+                <div class="log-stream" id="logContainer">
+                    <div class="log-row">
+                        <span class="log-time">{{ last_updated }}</span>
+                        <p class="log-message info">Dashboard ready. Configure parameters and start training.</p>
+                    </div>
+                </div>
+            </article>
+        </div>
+
+        <aside class="training-aside">
+            <article class="training-card config-card">
+                <header class="card-header compact">
+                    <div>
+                        <p class="card-eyebrow">Configuration</p>
+                        <h2>Federated Setup</h2>
+                    </div>
+                    <div class="config-actions">
+                        <button class="btn btn-ghost" onclick="resetConfig()">Defaults</button>
+                        <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+                    </div>
+                </header>
+                <details class="config-group" open>
+                    <summary>Federated Learning</summary>
+                    <div class="config-body">
+                        <label>Clients (Hospitals)
+                            <input type="number" id="numClients" value="{{ config.federated.num_clients|default(3) }}" min="2" max="10">
+                        </label>
+                        <label>Rounds
+                            <input type="number" id="numRounds" value="{{ config.federated.num_rounds|default(10) }}" min="1" max="200">
+                        </label>
+                        <label>Participation Rate: <span id="fractionFitValue">{{ (config.federated.fraction_fit|default(1.0) * 100)|int }}%</span>
+                            <input type="range" id="fractionFit" value="{{ (config.federated.fraction_fit|default(1.0) * 100)|int }}" min="10" max="100" step="5">
+                        </label>
+                    </div>
+                </details>
+
+                <details class="config-group" open>
+                    <summary>Differential Privacy</summary>
+                    <div class="config-body">
+                        <label class="toggle">
+                            <span>Enable DP</span>
+                            <input type="checkbox" id="dpEnabled" {{ 'checked' if config.privacy.enabled|default(true) else '' }}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label>Budget (ε)
+                            <input type="number" id="epsilonBudget" value="{{ config.privacy.epsilon_budget|default(50.0) }}" min="1" max="200" step="0.5">
+                        </label>
+                        <label>Noise (σ)
+                            <input type="number" id="noiseMultiplier" value="{{ config.privacy.noise_multiplier|default(0.8) }}" min="0.1" max="5" step="0.1">
+                        </label>
+                        <label>Max Gradient Norm
+                            <input type="number" id="maxGradNorm" value="{{ config.privacy.max_grad_norm|default(1.0) }}" min="0.1" max="10" step="0.1">
+                        </label>
+                    </div>
+                </details>
+
+                <details class="config-group">
+                    <summary>Training Parameters</summary>
+                    <div class="config-body">
+                        <label>Local Epochs
+                            <input type="number" id="localEpochs" value="{{ config.training.local_epochs|default(1) }}" min="1" max="10">
+                        </label>
+                        <label>Batch Size
+                            <input type="number" id="batchSize" value="{{ config.training.batch_size|default(32) }}" min="8" max="512" step="8">
+                        </label>
+                        <label>Learning Rate
+                            <input type="number" id="learningRate" value="{{ config.training.learning_rate|default(0.01) }}" min="0.0001" max="1" step="0.0001">
+                        </label>
+                        <label>Optimizer
+                            <select id="optimizer">
+                                {% set opt = config.training.optimizer|default('adam') %}
+                                <option value="adam" {{ 'selected' if opt == 'adam' else '' }}>Adam</option>
+                                <option value="sgd" {{ 'selected' if opt == 'sgd' else '' }}>SGD</option>
+                                <option value="rmsprop" {{ 'selected' if opt == 'rmsprop' else '' }}>RMSProp</option>
+                            </select>
+                        </label>
+                    </div>
+                </details>
+
+                <details class="config-group">
+                    <summary>Model Architecture</summary>
+                    <div class="config-body">
+                        <label>Model Name
+                            <input type="text" id="modelName" value="{{ config.model.name|default('simple_cnn') }}">
+                        </label>
+                        <label>Classes
+                            <input type="number" id="numClasses" value="{{ config.model.num_classes|default(2) }}" min="2" max="10">
+                        </label>
+                        <label>Dropout Rate: <span id="dropoutValue">{{ (config.model.dropout|default(0.3) * 100)|int }}%</span>
+                            <input type="range" id="dropout" value="{{ (config.model.dropout|default(0.3) * 100)|int }}" min="0" max="80" step="5">
+                        </label>
+                        <label class="toggle">
+                            <span>Use pretrained weights</span>
+                            <input type="checkbox" id="pretrained" {{ 'checked' if config.model.pretrained|default(false) else '' }}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </details>
+            </article>
+        </aside>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const STATUS_INTERVAL = 2000;
+let statusTimer = null;
+let logTimer = null;
+let previousStatus = "{{ training_state.status|default('idle') }}";
+
+function initTrainingDashboard() {
+    setupRangeMirrors();
+    fetchSummaryMetrics();
+    fetchTrainingStatus();
+    fetchTrainingLogs(true);
+    statusTimer = setInterval(fetchTrainingStatus, STATUS_INTERVAL);
+    logTimer = setInterval(fetchTrainingLogs, STATUS_INTERVAL * 1.5);
+}
+
+document.addEventListener('DOMContentLoaded', initTrainingDashboard);
+
+function setupRangeMirrors() {
+    const fractionFit = document.getElementById('fractionFit');
+    const fractionFitValue = document.getElementById('fractionFitValue');
+    if (fractionFit && fractionFitValue) {
+        fractionFit.addEventListener('input', () => {
+            fractionFitValue.textContent = fractionFit.value + '%';
+        });
+    }
+    const dropout = document.getElementById('dropout');
+    const dropoutValue = document.getElementById('dropoutValue');
+    if (dropout && dropoutValue) {
+        dropout.addEventListener('input', () => {
+            dropoutValue.textContent = dropout.value + '%';
+        });
+    }
+}
+
+async function fetchTrainingStatus() {
+    try {
+        const response = await fetch('/api/training/status');
+        const payload = await response.json();
+        if (payload.success) {
+            renderStatus(payload.state);
+        }
+    } catch (error) {
+        console.error('Failed to fetch training status', error);
+    }
+}
+
+async function fetchSummaryMetrics() {
+    try {
+        const response = await fetch('/api/metrics');
+        const payload = await response.json();
+        if (payload.summary) {
+            updateMetricBlock({
+                auc: payload.summary.best_auc,
+                accuracy: payload.summary.final_accuracy,
+                loss: payload.summary.final_loss,
+                epsilon: payload.summary.final_epsilon
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load summary metrics', error);
+    }
+}
+
+function renderStatus(state) {
+    const statusText = state.status ? state.status.charAt(0).toUpperCase() + state.status.slice(1) : 'Idle';
+    document.getElementById('statusHeading').textContent = statusText;
+    document.getElementById('statusLabel').textContent = statusText;
+    document.getElementById('statusMessage').textContent = state.message || 'Ready to start';
+    document.getElementById('heroStatus').textContent = statusText;
+    document.getElementById('statusChip').textContent = statusText;
+    
+    // Update status chip class
+    const statusChip = document.getElementById('statusChip');
+    statusChip.className = 'status-chip ' + (state.status || 'idle');
+    const heroStatus = document.getElementById('heroStatus');
+    heroStatus.className = 'status-chip ' + (state.status || 'idle');
+
+    const progress = state.total_rounds > 0 ? Math.min(100, Math.round((state.current_round / state.total_rounds) * 100)) : 0;
+    document.getElementById('progressFill').style.width = progress + '%';
+    document.getElementById('progressPercent').textContent = progress + '%';
+    document.getElementById('roundCounter').textContent = `Round ${state.current_round} / ${state.total_rounds}`;
+
+    // Update button states based on status
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    
+    const isRunning = state.status === 'running';
+    const isPaused = state.status === 'paused';
+    const isIdle = state.status === 'idle' || state.status === 'completed' || state.status === 'stopped' || state.status === 'error';
+    
+    startBtn.disabled = !isIdle;
+    startBtn.style.display = isIdle ? 'flex' : 'none';
+    
+    pauseBtn.disabled = !isRunning;
+    pauseBtn.style.display = isRunning ? 'flex' : 'none';
+    
+    resumeBtn.disabled = !isPaused;
+    resumeBtn.style.display = isPaused ? 'flex' : 'none';
+    
+    stopBtn.disabled = !isRunning && !isPaused;
+    resetBtn.disabled = isRunning || isPaused;
+
+    document.getElementById('refreshDot').classList.toggle('active', isRunning);
+
+    if ((isRunning || isPaused) && state.live_metrics) {
+        updateMetricBlock(state.live_metrics);
+    }
+
+    if (previousStatus === 'running' && state.status !== 'running' && state.status !== 'paused') {
+        fetchSummaryMetrics();
+    }
+    previousStatus = state.status;
+}
+
+function updateMetricBlock(metrics) {
+    const formatValue = (value, decimals = 4, suffix = '') => {
+        if (value === null || value === undefined || value === 'N/A' || Number.isNaN(Number(value))) {
+            return '-';
+        }
+        return `${parseFloat(value).toFixed(decimals)}${suffix}`;
+    };
+
+    const hasAccuracy = metrics.accuracy !== null && metrics.accuracy !== undefined && metrics.accuracy !== 'N/A';
+
+    document.getElementById('liveAuc').textContent = formatValue(metrics.auc);
+    document.getElementById('liveAccuracy').textContent = hasAccuracy ? formatValue(parseFloat(metrics.accuracy) * 100, 1, '%') : '-';
+    document.getElementById('liveLoss').textContent = formatValue(metrics.loss);
+    document.getElementById('liveEpsilon').textContent = formatValue(metrics.epsilon, 2);
+}
+
+function formatDuration(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+}
+
+async function fetchTrainingLogs(force = false) {
+    try {
+        const response = await fetch('/api/training/logs');
+        const payload = await response.json();
+        if (payload.success && Array.isArray(payload.logs)) {
+            renderLogEntries(payload.logs);
+        } else if (force) {
+            renderLogEntries([]);
+        }
+    } catch (error) {
+        if (force) {
+            console.error('Failed to fetch training logs', error);
+        }
+    }
+}
+
+function renderLogEntries(logs) {
+    const container = document.getElementById('logContainer');
+    container.innerHTML = '';
+    if (!logs.length) {
+        container.innerHTML = '<div class="log-row"><span class="log-time">--:--</span><p class="log-message info">Waiting for log output...</p></div>';
+        return;
+    }
+    const fragment = document.createDocumentFragment();
+    logs.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'log-row';
+        row.innerHTML = `
+            <span class="log-time">${entry.time || '--:--'}</span>
+            <p class="log-message ${entry.level || 'info'}">${entry.message}</p>
+        `;
+        fragment.appendChild(row);
+    });
+    container.appendChild(fragment);
+    container.scrollTop = container.scrollHeight;
+}
+
+function addLogEntry(message, type = 'info') {
+    const container = document.getElementById('logContainer');
+    const row = document.createElement('div');
+    row.className = 'log-row';
+    row.innerHTML = `
+        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+        <p class="log-message ${type}">${message}</p>
+    `;
+    container.appendChild(row);
+    container.scrollTop = container.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('logContainer').innerHTML = '';
+}
+
+function copyLog() {
+    const container = document.getElementById('logContainer');
+    if (!container) return;
+
+    const rows = container.querySelectorAll('.log-row');
+    let logText = '';
+    rows.forEach(row => {
+        const time = row.querySelector('.log-time')?.textContent || '';
+        const msg = row.querySelector('.log-message')?.textContent || '';
+        logText += `${time}\t${msg}\n`;
+    });
+
+    navigator.clipboard.writeText(logText).then(() => {
+        addLogEntry('Log copied to clipboard', 'success');
+    }).catch(err => {
+        addLogEntry('Failed to copy log: ' + err, 'error');
+    });
+}
+
+async function startTraining() {
+    const config = {
+        num_rounds: parseInt(document.getElementById('numRounds').value, 10),
+        num_clients: parseInt(document.getElementById('numClients').value, 10),
+        epsilon_budget: parseFloat(document.getElementById('epsilonBudget').value),
+        noise_multiplier: parseFloat(document.getElementById('noiseMultiplier').value)
+    };
+
+    try {
+        addLogEntry('Starting federated learning with native engine...', 'info');
+        const response = await fetch('/api/training/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry('Training started successfully', 'success');
+            fetchTrainingStatus();
+        } else {
+            addLogEntry(payload.message || 'Failed to start training', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+async function pauseTraining() {
+    try {
+        const response = await fetch('/api/training/pause', { method: 'POST' });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry('Training paused', 'warning');
+            fetchTrainingStatus();
+        } else {
+            addLogEntry(payload.message || 'Unable to pause training', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+async function resumeTraining() {
+    try {
+        const response = await fetch('/api/training/resume', { method: 'POST' });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry('Training resumed', 'success');
+            fetchTrainingStatus();
+        } else {
+            addLogEntry(payload.message || 'Unable to resume training', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+async function stopTraining() {
+    if (!confirm('Stop the running training job?')) return;
+    try {
+        const response = await fetch('/api/training/stop', { method: 'POST' });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry('Training stopped by user', 'warning');
+            fetchTrainingStatus();
+        } else {
+            addLogEntry(payload.message || 'Unable to stop training', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+async function resetTraining() {
+    const clearResults = confirm('Clear previous results as well?');
+    try {
+        const response = await fetch('/api/training/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clear_results: clearResults })
+        });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry(payload.message, 'info');
+            fetchSummaryMetrics();
+            fetchTrainingStatus();
+        } else {
+            addLogEntry(payload.message || 'Failed to reset training', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+async function saveConfig() {
+    const config = {
+        federated: {
+            num_clients: parseInt(document.getElementById('numClients').value, 10),
+            num_rounds: parseInt(document.getElementById('numRounds').value, 10),
+            fraction_fit: parseFloat(document.getElementById('fractionFit').value) / 100
+        },
+        privacy: {
+            enabled: document.getElementById('dpEnabled').checked,
+            epsilon_budget: parseFloat(document.getElementById('epsilonBudget').value),
+            noise_multiplier: parseFloat(document.getElementById('noiseMultiplier').value),
+            max_grad_norm: parseFloat(document.getElementById('maxGradNorm').value)
+        },
+        training: {
+            local_epochs: parseInt(document.getElementById('localEpochs').value, 10),
+            batch_size: parseInt(document.getElementById('batchSize').value, 10),
+            learning_rate: parseFloat(document.getElementById('learningRate').value),
+            optimizer: document.getElementById('optimizer').value
+        },
+        model: {
+            name: document.getElementById('modelName').value,
+            num_classes: parseInt(document.getElementById('numClasses').value, 10),
+            dropout: parseFloat(document.getElementById('dropout').value) / 100,
+            pretrained: document.getElementById('pretrained').checked
+        }
+    };
+
+    try {
+        const response = await fetch('/api/training/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const payload = await response.json();
+        if (payload.success) {
+            addLogEntry('Configuration saved', 'success');
+        } else {
+            addLogEntry(payload.message || 'Failed to save configuration', 'error');
+        }
+    } catch (error) {
+        addLogEntry(error.message, 'error');
+    }
+}
+
+function resetConfig() {
+    if (!confirm('Reset configuration to defaults?')) return;
+    document.getElementById('numClients').value = 3;
+    document.getElementById('numRounds').value = 10;
+    document.getElementById('fractionFit').value = 100;
+    document.getElementById('fractionFitValue').textContent = '100%';
+    document.getElementById('epsilonBudget').value = 50;
+    document.getElementById('noiseMultiplier').value = 0.8;
+    document.getElementById('maxGradNorm').value = 1.0;
+    document.getElementById('dpEnabled').checked = true;
+    document.getElementById('localEpochs').value = 1;
+    document.getElementById('batchSize').value = 32;
+    document.getElementById('learningRate').value = 0.01;
+    document.getElementById('optimizer').value = 'adam';
+    document.getElementById('modelName').value = 'simple_cnn';
+    document.getElementById('numClasses').value = 2;
+    document.getElementById('dropout').value = 30;
+    document.getElementById('dropoutValue').textContent = '30%';
+    document.getElementById('pretrained').checked = false;
+    addLogEntry('Configuration reset to defaults', 'info');
+}
+
+window.addEventListener('beforeunload', () => {
+    if (statusTimer) clearInterval(statusTimer);
+    if (logTimer) clearInterval(logTimer);
+});
+</script>
+{% endblock %}
